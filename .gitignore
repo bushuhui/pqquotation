@@ -13,7 +13,7 @@ ht_account.json
 Untitled.ipynb
 untitled.txt
 # Byte-compiled / optimized / DLL files
-__pycache__/
+__pycache__
 *.py[cod]
 account.json
 account.session

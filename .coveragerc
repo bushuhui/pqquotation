@@ -1,6 +1,6 @@
 [run]
 branch = True
-include = easyquotation/*
+include = pqquotation/*
 omit = tests/*
 
 [report]

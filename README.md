@@ -1,41 +1,22 @@
-# easyquotation
-
-[![Package](https://img.shields.io/pypi/v/easyquotation.svg)](https://pypi.python.org/pypi/easyquotation)
-[![License](https://img.shields.io/github/license/shidenggui/easyquotation.svg)](https://github.com/shidenggui/easyquotation/blob/master/LICENSE)
+# pqquotation
 
 
-快速获取新浪/腾讯的全市场行情, 网络正常的情况下只需要 `200+ms`
+
+
+快速获取新浪/腾讯/东方财富的全市场行情，网络正常的情况下只需要 `200+ms`。本软件基于 [easyquotation](https://github.com/shidenggui/easyquotation)改进而来。
 
 ### 前言
 * 获取新浪的免费实时行情
 * 获取腾讯财经的免费实时行情
+* 获取东方财富的免费实时行情
 * 获取集思路的数据
 
-### 微信群以及公众号
 
-欢迎大家扫码关注公众号「食灯鬼」，一起交流。进群可通过菜单加我好友，备注量化。
-
-![公众号二维码](https://camo.githubusercontent.com/6fad032c27b30b68a9d942ae77f8cc73933b95cea58e684657d31b94a300afd5/68747470733a2f2f67697465652e636f6d2f73686964656e676775692f6173736574732f7261772f6d61737465722f755069632f6d702d71722e706e67)
-
-若二维码因 Github 网络无法打开，请点击[公众号二维码](https://doc.metaslip.com/easy/weixin_gzh.png)直接打开图片。
-
-### Author
-
-**easyquotation** © [shidenggui](https://github.com/shidenggui), Released under the [MIT](./LICENSE) License.<br>
-
-> Blog [@shidenggui](https://shidenggui.com) · Weibo [@食灯鬼](https://www.weibo.com/u/1651274491) · Twitter [@shidenggui](https://twitter.com/shidenggui)
->
-
-
-### 其他作品
-
-* [easytrader 股票程序化交易库](https://github.com/shidenggui/easytrader)
-* [easyquant 简单的量化框架](https://github.com/shidenggui/easyqutant)
 
 ### 安装
 
 ```python
-pip install easyquotation
+pip install pqquotation
 ```
 
 ### 用法
@@ -43,13 +24,13 @@ pip install easyquotation
 #### 引入:
 
 ```python
-import easyquotation
+import pqquotation
 ```
 
 #### 选择行情
 
 ```python
-quotation = easyquotation.use('sina') # 新浪 ['sina'] 腾讯 ['tencent', 'qq'] 
+quotation = pqquotation.use('sina') # 新浪 ['sina'], 腾讯 ['tencent', 'qq'], 东方财富 ['dc', 'eastmoney']
 ```
 
 #### 获取所有股票行情
@@ -87,7 +68,7 @@ quotation.market_snapshot(prefix=True)
   ......
 }
 ```
- 
+
 ##### 单只股票
 
 ```python

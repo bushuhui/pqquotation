@@ -9,15 +9,15 @@ with open(path.join(this_directory, "README.md"), encoding="utf-8") as f:
     long_description = f.read()
 
 setup(
-    name="easyquotation",
-    version="0.7.7",
+    name="pqquotation",
+    version="0.8.0",
     description="A utility for Fetch China Stock Info",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    author="shidenggui",
-    author_email="longlyshidenggui@gmail.com",
+    author="bushuhui",
+    author_email="bushuhui@foxmail.com",
     license="BSD",
-    url="https://github.com/shidenggui/easyquotation",
+    url="https://github.com/bushuhui/pqquotation",
     keywords="China stock trade",
     install_requires=["requests"],
     classifiers=[
@@ -26,6 +26,6 @@ setup(
         "License :: OSI Approved :: BSD License",
     ],
     python_requires=">=3.6",
-    packages=["easyquotation"],
+    packages=["pqquotation"],
     package_data={"": ["*.conf"]},
 )
