@@ -89,19 +89,35 @@ class RoundRobinQuotation(basequotation.BaseQuotation):
             # 简单的移动平均
             stats['avg_response_time'] = (stats['avg_response_time'] + response_time) / 2
     
-    def _normalize_data_format(self, data: Dict[str, Any], source_name: str) -> Dict[str, Any]:
-        """统一数据格式，将不同数据源的格式标准化为sina格式"""
-        if source_name == 'sina':
-            return data
-        elif source_name == 'tencent':
-            return self._convert_tencent_to_sina(data)
-        elif source_name == 'dc':
-            return self._convert_dc_to_sina(data)
+    def _normalize_data_format(self, data: Dict[str, Any], source_name: str, return_format: str = 'digit') -> Dict[str, Any]:
+        """统一数据格式，将不同数据源的格式标准化为sina格式
+        :param return_format: 如果是'national'格式，则保持键的格式不变
+        """
+        # 对于national格式，直接返回原始数据，不进行键转换
+        if return_format == 'national':
+            if source_name == 'sina':
+                return data
+            elif source_name == 'tencent':
+                return self._convert_tencent_to_sina(data, preserve_keys=True)
+            elif source_name == 'dc':
+                return self._convert_dc_to_sina(data, preserve_keys=True)
+            else:
+                return data
         else:
-            return data
+            # 其他格式按原来的逻辑处理
+            if source_name == 'sina':
+                return data
+            elif source_name == 'tencent':
+                return self._convert_tencent_to_sina(data)
+            elif source_name == 'dc':
+                return self._convert_dc_to_sina(data)
+            else:
+                return data
     
-    def _convert_tencent_to_sina(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        """将腾讯数据格式转换为sina格式"""
+    def _convert_tencent_to_sina(self, data: Dict[str, Any], preserve_keys: bool = False) -> Dict[str, Any]:
+        """将腾讯数据格式转换为sina格式
+        :param preserve_keys: 是否保持原始键格式（用于national格式）
+        """
         normalized = {}
         for code, stock_data in data.items():
             try:
@@ -161,20 +177,45 @@ class RoundRobinQuotation(basequotation.BaseQuotation):
                 
         return normalized
     
-    def _convert_dc_to_sina(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        """将东方财富数据格式转换为sina格式"""
+    def _convert_dc_to_sina(self, data: Dict[str, Any], preserve_keys: bool = False) -> Dict[str, Any]:
+        """将东方财富数据格式转换为sina格式
+        :param preserve_keys: 是否保持原始键格式（用于national格式）
+        """
         # DC数据格式已经与sina基本一致，直接返回
         return data
     
-    def real(self, stock_codes, prefix=False, max_retries=3):
-        """获取指定股票的实时行情，支持Round-robin和故障切换
-        :param stock_codes: 股票代码或股票代码列表
-        :param prefix: 是否在返回键中包含市场前缀
+    def real(self, stock_codes, prefix=False, max_retries=3, return_format=None):
+        """获取指定股票的实时行情，支持Round-robin和故障切换 (增强版)
+        :param stock_codes: 股票代码或股票代码列表，
+                支持多种格式：数字格式(000001), 国标格式(sz000001), TS格式(000001.SZ)
+        :param prefix: 是否在返回键中包含市场前缀（当return_format='ts'时此参数被忽略）
         :param max_retries: 最大重试次数
+        :param return_format: 返回数据中股票代码的格式 ('digit': 000001, 'national': sz000001, 'ts': 000001.SZ)
+                    如果为None，使用全局配置的默认格式
         :return: 行情字典
         """
+        # 导入配置模块
+        from . import config
+        
+        # 如果没有指定return_format，使用全局配置
+        if return_format is None:
+            return_format = config.get_config().default_return_format
+        
         if not isinstance(stock_codes, list):
             stock_codes = [stock_codes]
+        
+        # 预处理：验证和标准化股票代码
+        from . import helpers
+        valid_codes = []
+        for code in stock_codes:
+            if helpers.validate_stock_code(code):
+                valid_codes.append(code)
+            else:
+                self._logger.warning(f"跳过无效股票代码 {code}。{helpers.format_stock_code_examples()}")
+        
+        if not valid_codes:
+            self._logger.error("没有有效的股票代码")
+            return {}
         
         retries = 0
         while retries < max_retries:
@@ -184,16 +225,38 @@ class RoundRobinQuotation(basequotation.BaseQuotation):
             start_time = time.time()
             try:
                 self._logger.info(f"使用数据源 {source_name} 获取行情数据")
-                raw_data = source.real(stock_codes, prefix=prefix)
+                
+                # 根据return_format调用底层接口
+                if return_format == 'ts':
+                    # TS格式时先获取数字格式数据，然后转换
+                    raw_data = source.real(valid_codes, prefix=False, return_format='digit')
+                elif return_format == 'national':
+                    # 国标格式
+                    raw_data = source.real(valid_codes, prefix=True, return_format='national')  
+                else:
+                    # 数字格式或其他
+                    raw_data = source.real(valid_codes, prefix=prefix, return_format=return_format)
                 
                 if raw_data:
                     response_time = time.time() - start_time
                     self._mark_source_success(source_name, response_time)
                     
                     # 数据格式标准化
-                    normalized_data = self._normalize_data_format(raw_data, source_name)
-                    self._logger.info(f"数据源 {source_name} 成功返回 {len(normalized_data)} 条数据")
-                    return normalized_data
+                    normalized_data = self._normalize_data_format(raw_data, source_name, return_format)
+                    
+                    # 根据return_format进行最终格式转换
+                    if return_format == 'ts':
+                        # 转换为TS格式
+                        final_data = helpers.convert_data_keys_to_ts_format(normalized_data)
+                    elif return_format == 'national':
+                        # 国标格式已经在调用底层接口时设置了prefix=True，保持原有数据
+                        final_data = normalized_data
+                    else:
+                        # 数字格式，保持原有数据
+                        final_data = normalized_data
+                    
+                    self._logger.info(f"数据源 {source_name} 成功返回 {len(final_data)} 条数据")
+                    return final_data
                 else:
                     raise Exception("返回数据为空")
                     

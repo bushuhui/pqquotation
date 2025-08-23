@@ -7,6 +7,7 @@ import warnings
 import requests
 
 from . import helpers
+from . import config
 
 
 class BaseQuotation(metaclass=abc.ABCMeta):
@@ -43,9 +44,28 @@ class BaseQuotation(metaclass=abc.ABCMeta):
         return stock_list
 
     def _gen_stock_prefix(self, stock_codes):
-        return [
-            helpers.get_stock_type(code) + code[-6:] for code in stock_codes
-        ]
+        """生成带市场前缀的股票代码列表 (增强版)
+        
+        支持多种输入格式:
+        - 数字格式: 000001 -> sz000001
+        - 国标格式: sz000001 -> sz000001  
+        - TS格式: 000001.SZ -> sz000001
+        """
+        result = []
+        for code in stock_codes:
+            try:
+                # 标准化为6位数字代码
+                normalized_code = helpers.normalize_stock_code(code)
+                # 获取市场类型
+                market_type = helpers.get_stock_type(code)
+                # 生成带前缀的代码
+                prefixed_code = market_type + normalized_code
+                result.append(prefixed_code)
+            except ValueError as e:
+                # 记录错误但继续处理其他代码
+                print(f"警告: 跳过无效股票代码 {code}: {e}")
+                continue
+        return result
 
     @staticmethod
     def load_stock_codes():
@@ -67,19 +87,52 @@ class BaseQuotation(metaclass=abc.ABCMeta):
         warnings.warn("use real instead", DeprecationWarning)
         return self.real(stock_codes, prefix)
 
-    def real(self, stock_codes, prefix=False):
-        """返回指定股票的实时行情
+    def real(self, stock_codes, prefix=False, return_format=None):
+        """返回指定股票的实时行情 (增强版)
         :param stock_codes: 股票代码或股票代码列表，
-                示例：'000001' / 'sh000001' / ['000001', '000002'] 
+                支持多种格式：数字格式(000001), 国标格式(sz000001), TS格式(000001.SZ) 
         :param prefix: 如果prefix为True，返回的行情字典键以sh/sz/bj市场标识开头
                     如果prefix为False，返回的行情将无法区分指数和股票代码，例如 sh000001 上证指数和 sz000001 平安银行
+        :param return_format: 返回数据中股票代码的格式 ('digit': 000001, 'national': sz000001, 'ts': 000001.SZ)
+                    如果为None，使用全局配置的默认格式
+                    注意：当return_format='ts'时，prefix参数将被忽略
         :return: 行情字典，键为股票代码，值为实时行情。
         """
+        # 如果没有指定return_format，使用全局配置
+        if return_format is None:
+            return_format = config.get_config().default_return_format
+        
         if not isinstance(stock_codes, list):
             stock_codes = [stock_codes]
 
-        stock_list = self.gen_stock_list(stock_codes)
-        return self.get_stock_data(stock_list, prefix=prefix)
+        # 预处理：验证和标准化股票代码
+        valid_codes = []
+        for code in stock_codes:
+            if helpers.validate_stock_code(code):
+                valid_codes.append(code)
+            else:
+                print(f"警告: 跳过无效股票代码 {code}。{helpers.format_stock_code_examples()}")
+        
+        if not valid_codes:
+            print("错误: 没有有效的股票代码")
+            return {}
+
+        stock_list = self.gen_stock_list(valid_codes)
+        
+        # 根据return_format决定prefix参数
+        if return_format == 'ts':
+            # TS格式时，先获取无prefix的数据，然后转换
+            data = self.get_stock_data(stock_list, prefix=False)
+            # 转换键格式为TS格式
+            data = helpers.convert_data_keys_to_ts_format(data)
+        elif return_format == 'national':
+            # 国标格式使用prefix=True
+            data = self.get_stock_data(stock_list, prefix=True)
+        else:
+            # 数字格式或其他，使用原始的prefix参数
+            data = self.get_stock_data(stock_list, prefix=prefix)
+        
+        return data
 
     def market_snapshot(self, prefix=False):
         """return all market quotation snapshot

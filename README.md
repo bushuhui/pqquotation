@@ -11,8 +11,15 @@
 * 获取东方财富的免费实时行情
 * 获取集思路的数据
 * 智能轮询机制: sina → tencent → dc 循环轮询访问数据，避免被屏蔽
-
-
+* 支持的股票代码格式多:
+   - 数字格式: 000001, 600000, 430047
+   - 前缀格式: sz000001, sh600000, bj430047
+   - 国标格式: 000001.SZ, 600000.SH, 430047.BJ
+* 结果返回的股票代码格式是国标格式，例如 000001.SZ
+   - `pqquotation.enable_ts_format_globally()`      # TS格式
+  pqquotation.enable_national_format_globally() # 国标格式
+  pqquotation.enable_digit_format_globally()    # 数字格式
+        
 
 ## 安装
 

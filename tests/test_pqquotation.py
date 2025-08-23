@@ -11,7 +11,7 @@ class TestEasyquotation(unittest.TestCase):
             q = pqquotation.use(src)
             data = q.market_snapshot(prefix=True)
             for k in data.keys():
-                self.assertRegex(k, r"(sh|sz)\d{6}")
+                self.assertRegex(k, r"(sh|sz|bj)\d{6}")
 
     def test_all(self):
         cases = ["sina", "qq"]

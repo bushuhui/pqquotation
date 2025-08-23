@@ -1,6 +1,13 @@
 # coding:utf8
 from .api import *
 from .helpers import get_stock_codes, update_stock_codes
+from .config import (
+    set_default_return_format, 
+    enable_ts_format_globally, 
+    enable_national_format_globally,
+    enable_digit_format_globally,
+    get_config
+)
 
-__version__ = "0.7.7"
-__author__ = "shidenggui"
+__version__ = "0.8.0"
+__author__ = "bushuhui"

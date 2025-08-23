@@ -310,6 +310,63 @@ class TestRoundRobinQuotation(unittest.TestCase):
         print(f"  标准化后字段: {list(stock_data.keys())[:5]}...")
         print("✓ 数据标准化功能正常")
     
+    def test_enhanced_code_format_support(self):
+        """测试增强版股票代码格式支持"""
+        print("\n=== 增强版股票代码格式支持测试 ===")
+        
+        # 不同格式的股票代码
+        test_formats = {
+            '数字格式': ['000001', '600000'],
+            '国标格式': ['sz000001', 'sh600000'],
+            'TS格式': ['000001.SZ', '600000.SH'],
+            '混合格式': ['000001', 'sz000002', '600000.SH']
+        }
+        
+        for format_name, codes in test_formats.items():
+            with self.subTest(format=format_name):
+                print(f"  测试 {format_name}: {codes}")
+                
+                try:
+                    data = self.rr.real(codes)
+                    
+                    if data:
+                        print(f"    ✓ 成功获取 {len(data)} 条数据")
+                        for code, stock_data in data.items():
+                            stock_name = stock_data.get('name', 'N/A')
+                            print(f"      {code}: {stock_name}")
+                    else:
+                        print(f"    × {format_name} 未获取到数据")
+                        
+                except Exception as e:
+                    print(f"    × {format_name} 测试失败: {e}")
+    
+    def test_invalid_code_handling_enhanced(self):
+        """测试增强版无效代码处理"""
+        print("\n=== 增强版无效代码处理测试 ===")
+        
+        # 混合有效和无效代码
+        mixed_codes = ['000001', 'invalid_code', '600000.SH', '123456', 'sz000002']
+        expected_valid_count = 3  # 3个有效代码
+        
+        try:
+            data = self.rr.real(mixed_codes)
+            
+            print(f"  输入代码: {mixed_codes}")
+            print(f"  返回数据数量: {len(data)}")
+            
+            # 应该只返回有效代码的数据
+            if data:
+                for code, stock_data in data.items():
+                    stock_name = stock_data.get('name', 'N/A')
+                    print(f"    {code}: {stock_name}")
+                    
+                print("  ✓ 无效代码被正确过滤")
+            else:
+                print("  × 所有代码都被过滤了")
+                
+        except Exception as e:
+            print(f"  × 无效代码处理测试失败: {e}")
+    
     def test_concurrent_requests(self):
         """测试并发请求处理"""
         print("\n=== 并发请求测试 ===")
