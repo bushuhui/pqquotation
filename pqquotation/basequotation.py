@@ -48,8 +48,8 @@ class BaseQuotation(metaclass=abc.ABCMeta):
         
         支持多种输入格式:
         - 数字格式: 000001 -> sz000001
-        - 国标格式: sz000001 -> sz000001  
-        - TS格式: 000001.SZ -> sz000001
+        - 前缀格式: sz000001 -> sz000001  
+        - 国标格式: 000001.SZ -> sz000001
         """
         result = []
         for code in stock_codes:
@@ -90,12 +90,12 @@ class BaseQuotation(metaclass=abc.ABCMeta):
     def real(self, stock_codes, prefix=False, return_format=None):
         """返回指定股票的实时行情 (增强版)
         :param stock_codes: 股票代码或股票代码列表，
-                支持多种格式：数字格式(000001), 国标格式(sz000001), TS格式(000001.SZ) 
+                支持多种格式：数字格式(000001), 前缀格式(sz000001), 国标格式(000001.SZ) 
         :param prefix: 如果prefix为True，返回的行情字典键以sh/sz/bj市场标识开头
                     如果prefix为False，返回的行情将无法区分指数和股票代码，例如 sh000001 上证指数和 sz000001 平安银行
-        :param return_format: 返回数据中股票代码的格式 ('digit': 000001, 'national': sz000001, 'ts': 000001.SZ)
+        :param return_format: 返回数据中股票代码的格式 ('digit': 000001, 'prefix': sz000001, 'national': 000001.SZ)
                     如果为None，使用全局配置的默认格式
-                    注意：当return_format='ts'时，prefix参数将被忽略
+                    注意：当return_format='national'时，prefix参数将被忽略
         :return: 行情字典，键为股票代码，值为实时行情。
         """
         # 如果没有指定return_format，使用全局配置
@@ -120,13 +120,13 @@ class BaseQuotation(metaclass=abc.ABCMeta):
         stock_list = self.gen_stock_list(valid_codes)
         
         # 根据return_format决定prefix参数
-        if return_format == 'ts':
-            # TS格式时，先获取无prefix的数据，然后转换
+        if return_format == 'national':
+            # 国标格式时，先获取无prefix的数据，然后转换
             data = self.get_stock_data(stock_list, prefix=False)
-            # 转换键格式为TS格式
-            data = helpers.convert_data_keys_to_ts_format(data)
-        elif return_format == 'national':
-            # 国标格式使用prefix=True
+            # 转换键格式为国标格式，传入原始代码以保留市场信息
+            data = helpers.convert_data_keys_to_national_format(data, valid_codes)
+        elif return_format == 'prefix':
+            # 前缀格式使用prefix=True
             data = self.get_stock_data(stock_list, prefix=True)
         else:
             # 数字格式或其他，使用原始的prefix参数

@@ -11,12 +11,12 @@ STOCK_CODE_PATH = os.path.join(os.path.dirname(__file__), "stock_codes.conf")
 # 股票代码格式正则表达式
 STOCK_CODE_PATTERNS = {
     'digital': re.compile(r'^\d{6}$'),                       # 数字格式: 000001
-    'national': re.compile(r'^(sh|sz|bj)\d{6}$', re.I),      # 国标格式: sz000001 (不区分大小写)
-    'ts': re.compile(r'^\d{6}\.(SH|SZ|BJ)$')                 # TS格式: 000001.SZ
+    'prefix': re.compile(r'^(sh|sz|bj)\d{6}$', re.I),        # 前缀格式: sz000001 (不区分大小写)
+    'national': re.compile(r'^\d{6}\.(SH|SZ|BJ)$')           # 国标格式: 000001.SZ
 }
 
-# TS格式到国标格式的映射
-TS_TO_NATIONAL_MAP = {
+# 国标格式到前缀格式的映射
+NATIONAL_TO_PREFIX_MAP = {
     'SH': 'sh',
     'SZ': 'sz', 
     'BJ': 'bj'
@@ -82,15 +82,15 @@ def normalize_stock_code(stock_code: str) -> str:
     if format_type == 'digital':
         # 数字格式: 000001 -> 000001
         normalized = code_upper
-    elif format_type == 'national':
-        # 国标格式: SZ000001 -> 000001
+    elif format_type == 'prefix':
+        # 前缀格式: SZ000001 -> 000001
         normalized = code_upper[2:]
-    elif format_type == 'ts':
-        # TS格式: 000001.SZ -> 000001
+    elif format_type == 'national':
+        # 国标格式: 000001.SZ -> 000001
         normalized = code_upper.split('.')[0]
     else:
         raise ValueError(f"不支持的股票代码格式: {stock_code}。支持的格式: "
-                        f"数字格式(000001), 国标格式(sz000001), TS格式(000001.SZ)")
+                        f"数字格式(000001), 前缀格式(sz000001), 国标格式(000001.SZ)")
     
     # 验证标准化后的代码
     if not re.match(r'^\d{6}$', normalized):
@@ -114,16 +114,16 @@ def validate_stock_code(stock_code: str) -> bool:
         return False
 
 
-def get_market_from_ts_code(stock_code: str) -> str:
-    """从TS格式代码中提取市场标识
+def get_market_from_national_code(stock_code: str) -> str:
+    """从国标格式代码中提取市场标识
     
-    :param stock_code: TS格式股票代码 (如: 000001.SZ)
+    :param stock_code: 国标格式股票代码 (如: 000001.SZ)
     :return: 市场标识 ('sh', 'sz', 'bj')
     """
     format_type = detect_stock_code_format(stock_code)
-    if format_type == 'ts':
+    if format_type == 'national':
         market_suffix = stock_code.upper().split('.')[1]
-        return TS_TO_NATIONAL_MAP.get(market_suffix, 'sz')
+        return NATIONAL_TO_PREFIX_MAP.get(market_suffix, 'sz')
     return ''
 
 
@@ -159,13 +159,13 @@ def get_stock_type(stock_code):
     
     code_upper = stock_code.upper().strip()
     
-    # 处理TS格式
-    format_type = detect_stock_code_format(code_upper)
-    if format_type == 'ts':
-        return get_market_from_ts_code(code_upper)
-    
     # 处理国标格式
+    format_type = detect_stock_code_format(code_upper)
     if format_type == 'national':
+        return get_market_from_national_code(code_upper)
+    
+    # 处理前缀格式
+    if format_type == 'prefix':
         if code_upper.startswith(("SH", "SZ", "ZZ", "BJ")):
             return code_upper[:2].lower()
     
@@ -196,24 +196,24 @@ def format_stock_code_examples() -> str:
     return """
 支持的股票代码格式:
 1. 数字格式: 000001, 600000, 430001
-2. 国标格式: sz000001, sh600000, bj430001  
-3. TS格式: 000001.SZ, 600000.SH, 430001.BJ
+2. 前缀格式: sz000001, sh600000, bj430001  
+3. 国标格式: 000001.SZ, 600000.SH, 430001.BJ
 """
 
 
-# 国标格式到TS格式的映射
-NATIONAL_TO_TS_MAP = {
+# 前缀格式到国标格式的映射
+PREFIX_TO_NATIONAL_MAP = {
     'sh': 'SH',
     'sz': 'SZ', 
     'bj': 'BJ'
 }
 
 
-def convert_to_ts_format(stock_code: str) -> str:
-    """将6位数字股票代码转换为TS格式
+def convert_to_national_format(stock_code: str) -> str:
+    """将6位数字股票代码转换为国标格式
     
     :param stock_code: 6位数字股票代码 (如: 000001)
-    :return: TS格式代码 (如: 000001.SZ)
+    :return: 国标格式代码 (如: 000001.SZ)
     """
     if not isinstance(stock_code, str):
         raise ValueError(f"股票代码必须是字符串类型，当前类型: {type(stock_code)}")
@@ -225,16 +225,16 @@ def convert_to_ts_format(stock_code: str) -> str:
     # 获取市场类型
     market_type = get_stock_type(stock_code)
     
-    # 转换为TS格式
-    ts_suffix = NATIONAL_TO_TS_MAP.get(market_type, 'SZ')  # 默认为SZ
-    return f"{stock_code}.{ts_suffix}"
+    # 转换为国标格式
+    national_suffix = PREFIX_TO_NATIONAL_MAP.get(market_type, 'SZ')  # 默认为SZ
+    return f"{stock_code}.{national_suffix}"
 
 
-def batch_convert_to_ts_format(stock_codes: List[str]) -> dict:
-    """批量将6位数字代码转换为TS格式
+def batch_convert_to_national_format(stock_codes: List[str]) -> dict:
+    """批量将6位数字代码转换为国标格式
     
     :param stock_codes: 6位数字股票代码列表
-    :return: 数字代码到TS格式的映射字典
+    :return: 数字代码到国标格式的映射字典
     """
     conversion_map = {}
     
@@ -242,24 +242,39 @@ def batch_convert_to_ts_format(stock_codes: List[str]) -> dict:
         try:
             # 确保输入是6位数字代码
             if re.match(r'^\d{6}$', code):
-                ts_code = convert_to_ts_format(code)
-                conversion_map[code] = ts_code
+                national_code = convert_to_national_format(code)
+                conversion_map[code] = national_code
             else:
                 print(f"警告: 跳过非6位数字代码 {code}")
         except Exception as e:
-            print(f"警告: 转换 {code} 到TS格式失败: {e}")
+            print(f"警告: 转换 {code} 到国标格式失败: {e}")
     
     return conversion_map
 
 
-def convert_data_keys_to_ts_format(data: dict) -> dict:
-    """将返回数据的键从6位数字格式转换为TS格式
+def convert_data_keys_to_national_format(data: dict, original_codes: List[str] = None) -> dict:
+    """将返回数据的键从6位数字格式转换为国标格式
     
     :param data: 原始数据字典，键为6位数字代码
-    :return: 键转换为TS格式的数据字典
+    :param original_codes: 原始输入的股票代码列表，用于保留市场信息
+    :return: 键转换为国标格式的数据字典
     """
     if not isinstance(data, dict):
         return data
+    
+    # 构建原始代码的市场信息映射
+    market_info_map = {}
+    if original_codes:
+        for original_code in original_codes:
+            try:
+                # 标准化原始代码得到6位数字
+                normalized = normalize_stock_code(original_code)
+                # 如果原始代码是国标格式，提取其市场信息
+                if detect_stock_code_format(original_code) == 'national':
+                    market_suffix = original_code.upper().split('.')[1]
+                    market_info_map[normalized] = market_suffix
+            except:
+                continue
     
     converted_data = {}
     
@@ -267,8 +282,13 @@ def convert_data_keys_to_ts_format(data: dict) -> dict:
         try:
             # 只转换6位数字格式的键
             if isinstance(code, str) and re.match(r'^\d{6}$', code):
-                ts_code = convert_to_ts_format(code)
-                converted_data[ts_code] = stock_info
+                # 如果有原始市场信息，使用它；否则使用默认判断
+                if code in market_info_map:
+                    market_suffix = market_info_map[code]
+                    national_code = f"{code}.{market_suffix}"
+                else:
+                    national_code = convert_to_national_format(code)
+                converted_data[national_code] = stock_info
             else:
                 # 保持原有键不变
                 converted_data[code] = stock_info
@@ -283,12 +303,12 @@ def convert_data_keys_to_ts_format(data: dict) -> dict:
 def get_return_format_converter(return_format: str):
     """获取返回格式转换器
     
-    :param return_format: 返回格式 ('digit', 'national', 'ts')
+    :param return_format: 返回格式 ('digit', 'prefix', 'national')
     :return: 转换函数
     """
-    if return_format == 'ts':
-        return convert_data_keys_to_ts_format
-    elif return_format == 'national':
+    if return_format == 'national':
+        return convert_data_keys_to_national_format
+    elif return_format == 'prefix':
         # 这个由现有的prefix参数处理
         return lambda data: data
     else:  # 'digit' 或其他

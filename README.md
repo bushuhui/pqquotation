@@ -1,11 +1,9 @@
 # pqquotation
 
 
-
-
 快速获取新浪/腾讯/东方财富的全市场行情，网络正常的情况下只需要 `200+ms`。本软件基于 [easyquotation](https://github.com/shidenggui/easyquotation)改进而来。
 
-## 前言
+## 功能
 * 获取新浪的免费实时行情
 * 获取腾讯财经的免费实时行情
 * 获取东方财富的免费实时行情
@@ -15,11 +13,10 @@
    - 数字格式: 000001, 600000, 430047
    - 前缀格式: sz000001, sh600000, bj430047
    - 国标格式: 000001.SZ, 600000.SH, 430047.BJ
-* 结果返回的股票代码格式是国标格式，例如 000001.SZ
-   - `pqquotation.enable_ts_format_globally()`      # TS格式
-  pqquotation.enable_national_format_globally() # 国标格式
-  pqquotation.enable_digit_format_globally()    # 数字格式
-        
+* 结果返回的股票代码默认格式是国标格式，例如 000001.SZ。也可以通过如下的函数设置输出数据的股票代码格式
+   - `pqquotation.enable_national_format_globally()`   # 国标格式, 000001.SZ, 600000.SH, 430047.BJ
+   - `pqquotation.enable_prefix_format_globally()`  #前缀格式， sz000001, sh600000, bj430047
+   - `pqquotation.enable_digit_format_globally()`    # 数字格式， 000001, 600000, 430047
 
 ## 安装
 
@@ -250,5 +247,6 @@ quotation.etfindex(index_id="", min_volume=0, max_discount=None, min_discount=No
 ```
 
 ## TODO
-* 增加自动切换服务器的功能，避免长时间连接一个服务器导致屏蔽连接
+* [x] 增加自动切换服务器的功能，避免长时间连接一个服务器导致屏蔽连接
+* [x] 支持多种股票代码格式，支持结果中股票代码格式设置
 

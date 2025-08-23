@@ -91,10 +91,10 @@ class RoundRobinQuotation(basequotation.BaseQuotation):
     
     def _normalize_data_format(self, data: Dict[str, Any], source_name: str, return_format: str = 'digit') -> Dict[str, Any]:
         """统一数据格式，将不同数据源的格式标准化为sina格式
-        :param return_format: 如果是'national'格式，则保持键的格式不变
+        :param return_format: 如果是'prefix'格式，则保持键的格式不变
         """
-        # 对于national格式，直接返回原始数据，不进行键转换
-        if return_format == 'national':
+        # 对于prefix格式，直接返回原始数据，不进行键转换
+        if return_format == 'prefix':
             if source_name == 'sina':
                 return data
             elif source_name == 'tencent':
@@ -116,7 +116,7 @@ class RoundRobinQuotation(basequotation.BaseQuotation):
     
     def _convert_tencent_to_sina(self, data: Dict[str, Any], preserve_keys: bool = False) -> Dict[str, Any]:
         """将腾讯数据格式转换为sina格式
-        :param preserve_keys: 是否保持原始键格式（用于national格式）
+        :param preserve_keys: 是否保持原始键格式（用于prefix格式）
         """
         normalized = {}
         for code, stock_data in data.items():
@@ -179,7 +179,7 @@ class RoundRobinQuotation(basequotation.BaseQuotation):
     
     def _convert_dc_to_sina(self, data: Dict[str, Any], preserve_keys: bool = False) -> Dict[str, Any]:
         """将东方财富数据格式转换为sina格式
-        :param preserve_keys: 是否保持原始键格式（用于national格式）
+        :param preserve_keys: 是否保持原始键格式（用于prefix格式）
         """
         # DC数据格式已经与sina基本一致，直接返回
         return data
@@ -187,10 +187,10 @@ class RoundRobinQuotation(basequotation.BaseQuotation):
     def real(self, stock_codes, prefix=False, max_retries=3, return_format=None):
         """获取指定股票的实时行情，支持Round-robin和故障切换 (增强版)
         :param stock_codes: 股票代码或股票代码列表，
-                支持多种格式：数字格式(000001), 国标格式(sz000001), TS格式(000001.SZ)
-        :param prefix: 是否在返回键中包含市场前缀（当return_format='ts'时此参数被忽略）
+                支持多种格式：数字格式(000001), 前缀格式(sz000001), 国标格式(000001.SZ)
+        :param prefix: 是否在返回键中包含市场前缀（当return_format='national'时此参数被忽略）
         :param max_retries: 最大重试次数
-        :param return_format: 返回数据中股票代码的格式 ('digit': 000001, 'national': sz000001, 'ts': 000001.SZ)
+        :param return_format: 返回数据中股票代码的格式 ('digit': 000001, 'prefix': sz000001, 'national': 000001.SZ)
                     如果为None，使用全局配置的默认格式
         :return: 行情字典
         """
@@ -227,12 +227,12 @@ class RoundRobinQuotation(basequotation.BaseQuotation):
                 self._logger.info(f"使用数据源 {source_name} 获取行情数据")
                 
                 # 根据return_format调用底层接口
-                if return_format == 'ts':
-                    # TS格式时先获取数字格式数据，然后转换
+                if return_format == 'national':
+                    # 国标格式时先获取数字格式数据，然后转换
                     raw_data = source.real(valid_codes, prefix=False, return_format='digit')
-                elif return_format == 'national':
-                    # 国标格式
-                    raw_data = source.real(valid_codes, prefix=True, return_format='national')  
+                elif return_format == 'prefix':
+                    # 前缀格式
+                    raw_data = source.real(valid_codes, prefix=True, return_format='prefix')  
                 else:
                     # 数字格式或其他
                     raw_data = source.real(valid_codes, prefix=prefix, return_format=return_format)
@@ -245,11 +245,11 @@ class RoundRobinQuotation(basequotation.BaseQuotation):
                     normalized_data = self._normalize_data_format(raw_data, source_name, return_format)
                     
                     # 根据return_format进行最终格式转换
-                    if return_format == 'ts':
-                        # 转换为TS格式
-                        final_data = helpers.convert_data_keys_to_ts_format(normalized_data)
-                    elif return_format == 'national':
-                        # 国标格式已经在调用底层接口时设置了prefix=True，保持原有数据
+                    if return_format == 'national':
+                        # 转换为国标格式，传入原始代码以保留市场信息
+                        final_data = helpers.convert_data_keys_to_national_format(normalized_data, valid_codes)
+                    elif return_format == 'prefix':
+                        # 前缀格式已经在调用底层接口时设置了prefix=True，保持原有数据
                         final_data = normalized_data
                     else:
                         # 数字格式，保持原有数据
