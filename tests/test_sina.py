@@ -2,16 +2,16 @@
 
 import unittest
 
-import easyquotation
+import pqquotation
 
 
 class TestSina(unittest.TestCase):
     def setUp(self):
-        self._sina = easyquotation.use("sina")
+        self._sina = pqquotation.use("sina")
 
     def test_extract_stock_name(self):
         """
-        fix https://github.com/shidenggui/easyquotation/issues/51
+        fix https://github.com/bushuhui/pqquotation
         """
         stock_name = self._sina.format_response_data(MOCK_DATA)["162411"][
             "name"

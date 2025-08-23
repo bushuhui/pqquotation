@@ -1,6 +1,6 @@
 # coding:utf8
 
-from . import boc, daykline, hkquote, jsl, sina, tencent, dc
+from . import boc, daykline, hkquote, jsl, sina, tencent, dc, roundrobin
 
 
 # pylint: disable=too-many-return-statements
@@ -19,4 +19,6 @@ def use(source):
         return daykline.DayKline()
     if source in ["hkquote"]:
         return hkquote.HKQuote()
+    if source in ["rr", "roundrobin", "round-robin"]:
+        return roundrobin.RoundRobinQuotation()
     raise NotImplementedError

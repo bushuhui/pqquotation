@@ -5,7 +5,7 @@
 
 快速获取新浪/腾讯/东方财富的全市场行情，网络正常的情况下只需要 `200+ms`。本软件基于 [easyquotation](https://github.com/shidenggui/easyquotation)改进而来。
 
-### 前言
+## 前言
 * 获取新浪的免费实时行情
 * 获取腾讯财经的免费实时行情
 * 获取东方财富的免费实时行情
@@ -13,27 +13,27 @@
 
 
 
-### 安装
+## 安装
 
 ```python
 pip install pqquotation
 ```
 
-### 用法
+## 用法
 
-#### 引入:
+### 引入:
 
 ```python
 import pqquotation
 ```
 
-#### 选择行情
+### 选择行情
 
 ```python
 quotation = pqquotation.use('sina') # 新浪 ['sina'], 腾讯 ['tencent', 'qq'], 东方财富 ['dc', 'eastmoney']
 ```
 
-#### 获取所有股票行情
+### 获取所有股票行情
 
 ```python
 # prefix 指定返回行情的股票代码是否带 sz/sh/bj 市场前缀
@@ -69,32 +69,61 @@ quotation.market_snapshot(prefix=True)
 }
 ```
 
-##### 单只股票
+#### 单只股票
 
 ```python
 quotation.real('162411') # 支持直接指定前缀，如 'sh000001'
 ```
 
-##### 多只股票
+#### 多只股票
 
 ```python
 quotation.real(['000001', '162411']) 
 ```
 
-##### 同时获取指数和行情
+#### 多个服务器轮询调用
+
+1. 智能轮询机制: sina → tencent → dc 循环轮询
+
+    2. 故障自动切换: 某个数据源失败时自动切换到下一个
+    3. 数据格式统一: 将tencent和dc的数据格式标准化为sina格式
+    4. 异常处理: 完整的重试机制和错误处理
+    5. 性能监控: 统计各数据源的成功率和响应时间
+    6. 多种别名支持: 'rr'、'roundrobin'、'round-robin'
+
+```Python
+import pqquotation
+
+# 创建Round-robin实例
+rr = pqquotation.use('roundrobin')  # 或 'rr', 'round-robin'
+
+# 获取实时行情
+data = rr.real(['000001', '000002', '600000'])
+
+# 查看数据源统计
+stats = rr.get_source_stats()
+
+# 重置失败状态
+rr.reset_failed_sources()
+```
+
+
+
+#### 同时获取指数和行情
+
 ```python
 # 获取相同代码的指数和股票时 prefix 必须为 True
 quotation.real(['sh000001', 'sz000001'], prefix=True)
 ```
 
-#### 更新内置全市场股票代码
+### 更新内置全市场股票代码
 
 ```python
 easyquotation.update_stock_codes()
 ```
 
 
-##### 港股日k线图
+### 港股日k线图
 *[腾讯日k线图](http://web.ifzq.gtimg.cn/appstock/app/hkfqkline/get?_var=kline_dayqfq&param=hk00700,day,,,350,qfq&r=0.7773272375526847)*
 
 ```python
@@ -118,7 +147,7 @@ print(data)
 }
 ```
 
-##### 腾讯港股实时行情 
+### 腾讯港股实时行情 
 *[腾讯控股实时行情](http://sqt.gtimg.cn/utf8/q=r_hk00700)*
 ```python
 
@@ -159,13 +188,13 @@ print(data)
 }
 ```
 
-#### 选择 [jsl](https://www.jisilu.cn)（集思录） 行情
+### 选择 [jsl](https://www.jisilu.cn)（集思录） 行情
 
 ```python
 quotation = easyquotation.use('jsl') 
 ```
 
-##### 设置 cookie (可选)
+#### 设置 cookie (可选)
 
 不设置的话获取相关数据有限制
 
@@ -174,7 +203,7 @@ quotation.set_cookie('从浏览器获取的集思录 Cookie')
 ```
 
 
-##### 指数ETF查询接口
+#### 指数ETF查询接口
 
 **TIP :** 尚未包含黄金ETF和货币ETF
 
@@ -211,4 +240,7 @@ quotation.etfindex(index_id="", min_volume=0, max_discount=None, min_discount=No
     }
 }
 ```
+
+## TODO
+* 增加自动切换服务器的功能，避免长时间连接一个服务器导致屏蔽连接
 
