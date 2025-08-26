@@ -10,7 +10,7 @@ with open(path.join(this_directory, "README.md"), encoding="utf-8") as f:
 
 setup(
     name="pqquotation",
-    version="0.8.1",
+    version="0.8.2",
     description="A utility for Fetch China Stock Info",
     long_description=long_description,
     long_description_content_type="text/markdown",

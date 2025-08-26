@@ -26,26 +26,65 @@ class DC(basequotation.BaseQuotation):
         return str(int(time.time() * 1000))
 
     def verify_stock_or_index(self, symbol):
-        """验证是否为股票或指数
-        返回 True 表示是深圳市场 (0.)，False 表示是上海市场 (1.)
+        """验证市场归属，确定API前缀
+        返回市场前缀：0=深圳/北交所, 1=上海
         """
-        code = re.search(r"(\d+)", str(symbol), re.S | re.M).group(1)
+        symbol = str(symbol)
         
-        # 特殊指数处理 - 这些指数在东方财富系统中属于上海市场
-        index_codes = {
-            '000300',  # 沪深300
-            '000905',  # 中证500
-            '000852',  # 中证1000
+        # 提取数字代码
+        code_match = re.search(r"(\d+)", symbol, re.S | re.M)
+        if not code_match:
+            return False  # 默认上海
+        code = code_match.group(1)
+        
+        # 1. 优先根据后缀判断（最准确）
+        if '.BJ' in symbol:
+            # 北交所：统一使用 0. 前缀
+            return True
+        elif '.SH' in symbol:
+            # 明确标识的上海股票：使用 1. 前缀
+            return False
+        elif '.SZ' in symbol:
+            # 明确标识的深圳股票：使用 0. 前缀
+            return True
+        
+        # 2. 特殊指数处理（这些虽然是000开头，但属于上海系统）
+        special_sh_indices = {
             '000016',  # 上证50
+            '000300',  # 沪深300
+            '000852',  # 中证1000
+            '000905',  # 中证500
         }
         
-        if code in index_codes:
-            return False  # 这些指数属于上海市场 (1.)
+        if code in special_sh_indices:
+            return False  # 上海市场 (1.)
         
-        # 深圳市场：000xxx(除特殊指数), 002xxx, 003xxx, 300xxx等  
-        # 上海市场：600xxx, 601xxx, 603xxx, 688xxx等
-        if code.startswith(('000', '002', '003', '300')):
+        # 3. 根据代码段判断市场（无后缀的情况）
+        
+        # 深圳市场代码段 (0.)：
+        if code.startswith(('000', '001', '002', '003',    # 深圳主板
+                           '300', '301',                  # 创业板
+                           '159',                         # 深圳ETF
+                           '399')):                       # 深圳指数
             return True
+        
+        # 上海市场代码段 (1.)：
+        if code.startswith(('600', '601', '603', '605',    # 上海主板
+                           '688',                          # 科创板
+                           '510', '511', '512', '513',     # 上海ETF
+                           '515', '516', '517', '518',     
+                           '588',                          # 科创板ETF
+                           '430', '920')):                 # 特殊代码
+            return False
+        
+        # 4. 默认判断（根据经验规则）
+        # 8位数字代码通常是北交所
+        if len(code) >= 6:
+            # 83xxxx, 87xxxx 等北交所代码
+            if code.startswith(('43', '83', '87', '92')):
+                return True  # 北交所使用深圳前缀 (0.)
+        
+        # 默认返回上海
         return False
 
     def format_str_to_float(self, x):
@@ -55,9 +94,19 @@ class DC(basequotation.BaseQuotation):
         except:
             return 0
 
-    def format_dc_price(self, x):
-        """格式化东方财富价格数据（除以100）"""
-        return float(x / 100) if x != "-" and x != 0 else 0
+    def format_dc_price(self, x, is_etf=False):
+        """格式化东方财富价格数据
+        普通股票除以100，ETF基金除以1000
+        """
+        if x == "-" or x == 0:
+            return 0
+        
+        if is_etf:
+            # ETF基金需要除以1000
+            return float(x / 1000)
+        else:
+            # 普通股票除以100
+            return float(x / 100)
 
     def get_stocks_by_range(self, params):
         """重写基类方法，适配东方财富API"""
@@ -101,34 +150,56 @@ class DC(basequotation.BaseQuotation):
                     data_info = data_json["data"]
                     
                     # 解析数据
-                    stock_data = self._parse_stock_data(data_info, code)
+                    stock_data = self._parse_stock_data(data_info, code, stock_code)
                     if stock_data:
-                        results[code] = stock_data
+                        results[stock_code] = stock_data
                         
             except Exception as e:
                 print(f"获取股票 {code} 数据失败: {e}")
                 continue
         
         return results
+    
+    def stocks(self, stock_codes, prefix=False):
+        """获取股票实时行情数据"""
+        if isinstance(stock_codes, str):
+            stock_codes = [stock_codes]
+        
+        return self.get_stocks_by_range(','.join(stock_codes))
+    
+    def _is_etf(self, code, name=""):
+        """判断是否为ETF基金"""
+        # 根据代码判断
+        if code.startswith(('159', '51')):  # 159xxx.SZ, 51xxxx.SH
+            return True
+        
+        # 根据名称判断（包含ETF关键词）
+        if name and 'ETF' in name:
+            return True
+            
+        return False
 
-    def _parse_stock_data(self, data_info, code):
+    def _parse_stock_data(self, data_info, code, stock_code=""):
         """解析股票数据"""
         try:
             # 基本信息
             name = data_info.get("f58", "")
             if not name:
                 return None
+            
+            # 判断是否为ETF基金
+            is_etf = self._is_etf(stock_code or code, name)
                 
             # 价格信息
-            open_price = self.format_dc_price(data_info.get("f46", 0))
-            high = self.format_dc_price(data_info.get("f44", 0))
-            pre_close = self.format_dc_price(data_info.get("f60", 0))
-            low = self.format_dc_price(data_info.get("f45", 0))
-            now = self.format_dc_price(data_info.get("f43", 0))
+            open_price = self.format_dc_price(data_info.get("f46", 0), is_etf)
+            high = self.format_dc_price(data_info.get("f44", 0), is_etf)
+            pre_close = self.format_dc_price(data_info.get("f60", 0), is_etf)
+            low = self.format_dc_price(data_info.get("f45", 0), is_etf)
+            now = self.format_dc_price(data_info.get("f43", 0), is_etf)
             
             # 买卖盘信息
-            bid1 = self.format_dc_price(data_info.get("f19", 0))
-            ask1 = self.format_dc_price(data_info.get("f39", 0))
+            bid1 = self.format_dc_price(data_info.get("f19", 0), is_etf)
+            ask1 = self.format_dc_price(data_info.get("f39", 0), is_etf)
             
             # 成交量和成交额
             turnover = self.format_str_to_float(data_info.get("f47", 0))
@@ -144,11 +215,11 @@ class DC(basequotation.BaseQuotation):
             ]
             
             bid_prices = [
-                self.format_dc_price(data_info.get("f19", 0)),
-                self.format_dc_price(data_info.get("f17", 0)),
-                self.format_dc_price(data_info.get("f15", 0)),
-                self.format_dc_price(data_info.get("f13", 0)),
-                self.format_dc_price(data_info.get("f11", 0))
+                self.format_dc_price(data_info.get("f19", 0), is_etf),
+                self.format_dc_price(data_info.get("f17", 0), is_etf),
+                self.format_dc_price(data_info.get("f15", 0), is_etf),
+                self.format_dc_price(data_info.get("f13", 0), is_etf),
+                self.format_dc_price(data_info.get("f11", 0), is_etf)
             ]
             
             ask_volumes = [
@@ -160,11 +231,11 @@ class DC(basequotation.BaseQuotation):
             ]
             
             ask_prices = [
-                self.format_dc_price(data_info.get("f39", 0)),
-                self.format_dc_price(data_info.get("f37", 0)),
-                self.format_dc_price(data_info.get("f35", 0)),
-                self.format_dc_price(data_info.get("f33", 0)),
-                self.format_dc_price(data_info.get("f31", 0))
+                self.format_dc_price(data_info.get("f39", 0), is_etf),
+                self.format_dc_price(data_info.get("f37", 0), is_etf),
+                self.format_dc_price(data_info.get("f35", 0), is_etf),
+                self.format_dc_price(data_info.get("f33", 0), is_etf),
+                self.format_dc_price(data_info.get("f31", 0), is_etf)
             ]
             
             # 时间信息

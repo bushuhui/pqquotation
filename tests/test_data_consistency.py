@@ -1,21 +1,95 @@
-# coding:utf8
-import unittest
+# coding: utf8
+"""
+测试sina、qq、dc三个数据源的数据一致性
+采用并发获取和智能容差对比策略
+"""
+
 import time
+import asyncio
+import threading
+import logging
+from typing import List, Dict, Any, Tuple, Optional
+from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import json
+import sys
+import os
+from datetime import datetime
 import statistics
-from typing import Dict, List, Any
+import random
+
+# 添加项目路径
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 import pqquotation
 
+# 配置日志
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('data_consistency_test.log', encoding='utf-8'),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger(__name__)
 
-class TestDataConsistency(unittest.TestCase):
-    """测试不同数据源的数据一致性"""
+
+class DataConsistencyChecker:
+    """数据一致性检查器"""
     
-    def setUp(self):
-        """设置测试环境"""
-        self.test_stocks = ['000001', '000002', '600000']  # 测试股票代码
-        self.sources = ['sina', 'qq', 'dc']  # 测试的数据源
-        self.common_fields = ['name', 'open', 'high', 'low', 'now']  # 共同字段
-        self.tolerance = 0.05  # 价格差异容忍度（5%）
+    def __init__(self):
+        self.sources = ['sina', 'qq', 'dc']
+        self.quotation_apis = {}
+        
+        # 字段映射 - 统一不同数据源的字段名
+        self.field_mapping = {
+            'sina': {
+                'name': 'name', 'now': 'now', 'close': 'close', 'open': 'open',
+                'high': 'high', 'low': 'low', 'volume': 'volume'
+            },
+            'qq': {
+                'name': 'name', 'now': 'now', 'close': 'close', 'open': 'open',
+                'high': 'high', 'low': 'low', 'volume': 'volume'
+            },
+            'dc': {
+                'name': 'name', 'now': 'now', 'close': 'close', 'open': 'open',
+                'high': 'high', 'low': 'low', 'volume': 'volume'
+            }
+        }
+        
+        # 容差设置
+        self.tolerance = {
+            'price_percent': 0.1,    # 价格容差0.1%
+            'volume_percent': 5.0,   # 成交量容差5%
+            'name_similarity': 0.8   # 名称相似度80%
+        }
+        
+        # 批量大小限制（取最小值确保兼容）
+        self.batch_size = 50  # qq限制60，但为安全起见用50
+        
+        # 初始化数据源
+        self.init_data_sources()
+        
+        # 结果统计
+        self.results = {
+            'total_tested': 0,
+            'successful_comparisons': 0,
+            'consistency_stats': {},
+            'inconsistent_stocks': [],
+            'error_stocks': [],
+            'field_consistency': defaultdict(lambda: defaultdict(int)),
+            'source_availability': defaultdict(int)
+        }
+    
+    def init_data_sources(self):
+        """初始化数据源"""
+        for source in self.sources:
+            try:
+                self.quotation_apis[source] = pqquotation.use(source)
+                logger.info(f"初始化数据源 {source} 成功")
+            except Exception as e:
+                logger.error(f"初始化数据源 {source} 失败: {e}")
         
     def test_data_source_availability(self):
         """测试各数据源的可用性"""
