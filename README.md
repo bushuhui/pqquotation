@@ -246,6 +246,7 @@ quotation.etfindex(index_id="", min_volume=0, max_discount=None, min_discount=No
 ```
 
 ## TODO
+* [x] 检查数据源 sina，qq，dc，访问数据是否完毕，数据是否一致。sina和dc的数据比较一致，qq的volume字段有些问题
 * [x] 增加自动切换服务器的功能，避免长时间连接一个服务器导致屏蔽连接
 * [x] 支持多种股票代码格式，支持结果中股票代码格式设置
 
