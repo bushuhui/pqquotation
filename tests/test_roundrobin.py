@@ -153,10 +153,11 @@ class TestRoundRobinQuotation(unittest.TestCase):
         """测试故障处理功能"""
         print("\n=== 故障处理测试 ===")
         
-        # 手动标记sina为失败
-        self.rr._mark_source_failed('sina')
+        # 连续标记sina失败多次（新逻辑需要连续失败3次才会被标记为不可用）
+        for i in range(3):
+            self.rr._mark_source_failed('sina')
         failed_sources_before = set(self.rr._failed_sources)
-        print(f"手动标记sina失败后，失败数据源: {failed_sources_before}")
+        print(f"连续标记sina失败3次后，失败数据源: {failed_sources_before}")
         
         # 尝试获取数据，应该自动切换到其他数据源
         data = self.rr.real(self.single_code[0])
@@ -217,22 +218,22 @@ class TestRoundRobinQuotation(unittest.TestCase):
         """测试prefix参数功能"""
         print("\n=== Prefix参数测试 ===")
         
-        # 测试不带prefix
-        data_without_prefix = self.rr.real(self.single_code[0], prefix=False)
+        # 测试数字格式（明确指定return_format='digit'）
+        data_digit = self.rr.real(self.single_code[0], prefix=False, return_format='digit')
         
-        # 测试带prefix  
-        data_with_prefix = self.rr.real(self.single_code[0], prefix=True)
+        # 测试前缀格式（明确指定return_format='prefix'）
+        data_prefix = self.rr.real(self.single_code[0], prefix=True, return_format='prefix')
         
-        if data_without_prefix and data_with_prefix:
-            # 不带prefix的键应该是纯数字
-            for code in data_without_prefix.keys():
-                self.assertRegex(code, r'^\d{6}$', "不带prefix的股票代码应该是6位数字")
-                print(f"  无prefix: {code}")
+        if data_digit and data_prefix:
+            # 数字格式的键应该是纯数字
+            for code in data_digit.keys():
+                self.assertRegex(code, r'^\d{6}$', "数字格式的股票代码应该是6位数字")
+                print(f"  数字格式: {code}")
             
-            # 带prefix的键应该包含市场标识
-            for code in data_with_prefix.keys():
-                self.assertRegex(code, r'^(sh|sz|bj)\d{6}$', "带prefix的股票代码应该包含市场标识")
-                print(f"  带prefix: {code}")
+            # 前缀格式的键应该包含市场标识
+            for code in data_prefix.keys():
+                self.assertRegex(code, r'^(sh|sz|bj)\d{6}$', "前缀格式的股票代码应该包含市场标识")
+                print(f"  前缀格式: {code}")
             
             print("✓ Prefix参数功能正常")
         else:

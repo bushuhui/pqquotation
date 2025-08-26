@@ -30,7 +30,19 @@ class DC(basequotation.BaseQuotation):
         返回 True 表示是深圳市场 (0.)，False 表示是上海市场 (1.)
         """
         code = re.search(r"(\d+)", str(symbol), re.S | re.M).group(1)
-        # 深圳市场：000xxx, 002xxx, 003xxx, 300xxx等
+        
+        # 特殊指数处理 - 这些指数在东方财富系统中属于上海市场
+        index_codes = {
+            '000300',  # 沪深300
+            '000905',  # 中证500
+            '000852',  # 中证1000
+            '000016',  # 上证50
+        }
+        
+        if code in index_codes:
+            return False  # 这些指数属于上海市场 (1.)
+        
+        # 深圳市场：000xxx(除特殊指数), 002xxx, 003xxx, 300xxx等  
         # 上海市场：600xxx, 601xxx, 603xxx, 688xxx等
         if code.startswith(('000', '002', '003', '300')):
             return True
