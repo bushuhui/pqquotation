@@ -152,7 +152,8 @@ class DC(basequotation.BaseQuotation):
                     # 解析数据
                     stock_data = self._parse_stock_data(data_info, code, stock_code)
                     if stock_data:
-                        results[stock_code] = stock_data
+                        # 使用6位数字代码作为键，保持与其他数据源一致
+                        results[code] = stock_data
                         
             except Exception as e:
                 print(f"获取股票 {code} 数据失败: {e}")
@@ -166,6 +167,73 @@ class DC(basequotation.BaseQuotation):
             stock_codes = [stock_codes]
         
         return self.get_stocks_by_range(','.join(stock_codes))
+    
+    def real(self, stock_codes, prefix=False, return_format=None):
+        """获取股票实时行情数据 - 兼容基类接口
+        :param stock_codes: 股票代码或股票代码列表
+        :param prefix: 是否在返回键中包含市场前缀
+        :param return_format: 返回数据中股票代码的格式
+        :return: 行情字典
+        """
+        from . import config, helpers
+        
+        # 如果没有指定return_format，使用全局配置
+        if return_format is None:
+            return_format = config.get_config().default_return_format
+            
+        # 标准化输入为列表
+        if isinstance(stock_codes, str):
+            stock_codes = [stock_codes]
+        elif not isinstance(stock_codes, list):
+            stock_codes = list(stock_codes)
+            
+        # 获取原始数据 - 使用逗号分隔的字符串
+        raw_data = self.get_stocks_by_range(','.join(stock_codes))
+        
+        # 根据return_format调整返回键格式
+        if return_format == 'national':
+            # 转换为国标格式
+            result = helpers.convert_data_keys_to_national_format(raw_data, stock_codes)
+        elif return_format == 'digit':
+            # 转换为数字格式（去掉前缀）
+            converted_data = {}
+            for key, value in raw_data.items():
+                if isinstance(key, str) and key.startswith(('sh', 'sz', 'bj')):
+                    # 去掉前缀，保留6位数字
+                    digit_key = key[2:]
+                    converted_data[digit_key] = value
+                else:
+                    converted_data[key] = value
+            result = converted_data
+        elif return_format == 'prefix' or prefix:
+            # 转换为前缀格式（如 sz000001）
+            converted_data = {}
+            from . import helpers
+            for key, value in raw_data.items():
+                if isinstance(key, str) and key.isdigit() and len(key) == 6:
+                    # 6位数字代码，需要添加市场前缀
+                    market_type = helpers.get_stock_type(key)
+                    prefix_key = market_type + key
+                    converted_data[prefix_key] = value
+                elif isinstance(key, str) and key.startswith(('sh', 'sz', 'bj')):
+                    # 已经是前缀格式，保持不变
+                    converted_data[key] = value
+                else:
+                    # 其他格式保持不变
+                    converted_data[key] = value
+            result = converted_data
+        else:
+            # 默认按照digit格式处理
+            converted_data = {}
+            for key, value in raw_data.items():
+                if isinstance(key, str) and key.startswith(('sh', 'sz', 'bj')):
+                    digit_key = key[2:]
+                    converted_data[digit_key] = value
+                else:
+                    converted_data[key] = value
+            result = converted_data
+            
+        return result
     
     def _is_etf(self, code, name=""):
         """判断是否为ETF基金"""

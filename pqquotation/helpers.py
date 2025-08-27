@@ -253,9 +253,9 @@ def batch_convert_to_national_format(stock_codes: List[str]) -> dict:
 
 
 def convert_data_keys_to_national_format(data: dict, original_codes: List[str] = None) -> dict:
-    """将返回数据的键从6位数字格式转换为国标格式
+    """将返回数据的键从各种格式转换为国标格式
     
-    :param data: 原始数据字典，键为6位数字代码
+    :param data: 原始数据字典，键可能是6位数字代码或前缀格式代码
     :param original_codes: 原始输入的股票代码列表，用于保留市场信息
     :return: 键转换为国标格式的数据字典
     """
@@ -280,7 +280,7 @@ def convert_data_keys_to_national_format(data: dict, original_codes: List[str] =
     
     for code, stock_info in data.items():
         try:
-            # 只转换6位数字格式的键
+            # 处理6位数字格式的键
             if isinstance(code, str) and re.match(r'^\d{6}$', code):
                 # 如果有原始市场信息，使用它；否则使用默认判断
                 if code in market_info_map:
@@ -289,9 +289,26 @@ def convert_data_keys_to_national_format(data: dict, original_codes: List[str] =
                 else:
                     national_code = convert_to_national_format(code)
                 converted_data[national_code] = stock_info
-            else:
-                # 保持原有键不变
+            
+            # 处理前缀格式的键（如 sh000001, sz000001）
+            elif isinstance(code, str) and re.match(r'^(sh|sz|bj)\d{6}$', code, re.I):
+                # 提取市场前缀和数字代码
+                market_prefix = code[:2].lower()
+                digit_code = code[2:]
+                
+                # 转换为国标格式
+                market_suffix = PREFIX_TO_NATIONAL_MAP.get(market_prefix, 'SZ')
+                national_code = f"{digit_code}.{market_suffix}"
+                converted_data[national_code] = stock_info
+            
+            # 已经是国标格式的键，直接保留
+            elif isinstance(code, str) and re.match(r'^\d{6}\.(SH|SZ|BJ)$', code):
                 converted_data[code] = stock_info
+            
+            else:
+                # 其他格式保持原有键不变
+                converted_data[code] = stock_info
+                
         except Exception as e:
             print(f"警告: 转换数据键 {code} 失败: {e}")
             # 出错时保持原键

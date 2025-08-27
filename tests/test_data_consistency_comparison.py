@@ -78,7 +78,9 @@ class DataConsistencyChecker:
             'inconsistent_stocks': [],
             'error_stocks': [],
             'field_consistency': defaultdict(lambda: defaultdict(int)),
-            'source_availability': defaultdict(int)
+            'source_availability': defaultdict(int),
+            'code_format_issues': [],  # 新增：股票代码格式问题统计
+            'code_format_stats': defaultdict(int)  # 新增：各数据源代码格式统计
         }
     
     def init_data_sources(self):
@@ -91,19 +93,42 @@ class DataConsistencyChecker:
                 logger.error(f"初始化数据源 {source} 失败: {e}")
     
     def load_test_codes(self, sample_size: int = 100) -> List[str]:
-        """加载测试用的股票代码"""
+        """加载测试用的股票代码，确保为国标格式"""
         codes_file = os.path.join(os.path.dirname(__file__), 'all_codes.txt')
         try:
             with open(codes_file, 'r', encoding='utf-8') as f:
                 all_codes = [line.strip() for line in f if line.strip()]
             
+            # 过滤和转换为国标格式
+            national_codes = []
+            from pqquotation import helpers
+            
+            for code in all_codes:
+                try:
+                    if helpers.validate_stock_code(code):
+                        # 如果不是国标格式，转换为国标格式
+                        if not self.is_national_format(code):
+                            # 标准化为6位数字，然后转换为国标格式
+                            digit_code = helpers.normalize_stock_code(code)
+                            national_code = helpers.convert_to_national_format(digit_code)
+                            national_codes.append(national_code)
+                        else:
+                            # 已经是国标格式，直接使用
+                            national_codes.append(code)
+                except Exception as e:
+                    logger.warning(f"跳过无效股票代码 {code}: {e}")
+                    continue
+            
+            # 去重
+            national_codes = list(set(national_codes))
+            
             # 随机采样
-            if len(all_codes) > sample_size:
-                test_codes = random.sample(all_codes, sample_size)
+            if len(national_codes) > sample_size:
+                test_codes = random.sample(national_codes, sample_size)
             else:
-                test_codes = all_codes
+                test_codes = national_codes
                 
-            logger.info(f"加载测试股票代码 {len(test_codes)} 个")
+            logger.info(f"加载国标格式测试股票代码 {len(test_codes)} 个")
             return test_codes
             
         except Exception as e:
@@ -121,7 +146,8 @@ class DataConsistencyChecker:
                     return source, {}
                 
                 api = self.quotation_apis[source]
-                data = api.stocks(codes)
+                # 强制使用国标格式，确保输入输出代码格式一致
+                data = api.real(codes, return_format='national')
                 
                 # 记录成功获取的股票数量
                 if data:
@@ -212,6 +238,68 @@ class DataConsistencyChecker:
             # 其他字段精确比较
             return val1 == val2, "精确比较"
     
+    def validate_stock_code_format(self, input_code: str, returned_codes: List[str], source: str) -> bool:
+        """验证返回的股票代码格式是否与输入一致
+        :param input_code: 输入的国标格式股票代码 (如: 000001.SZ)
+        :param returned_codes: 数据源返回的股票代码列表
+        :param source: 数据源名称
+        :return: True表示格式正确，False表示格式不一致
+        """
+        if not returned_codes:
+            return False
+            
+        # 检查是否存在与输入代码完全匹配的返回代码
+        if input_code in returned_codes:
+            return True
+        
+        # 检查返回的代码格式是否都是国标格式
+        for returned_code in returned_codes:
+            if not self.is_national_format(returned_code):
+                logger.warning(f"{source}返回非国标格式代码: {returned_code} (输入: {input_code})")
+                return False
+        
+        # 如果返回代码不包含输入代码，但格式都正确，可能是代码映射问题
+        # 提取6位数字部分进行比较
+        input_digits = self.extract_digits_from_code(input_code)
+        if input_digits:
+            for returned_code in returned_codes:
+                returned_digits = self.extract_digits_from_code(returned_code)
+                if returned_digits == input_digits:
+                    logger.info(f"{source}代码映射: {input_code} -> {returned_code}")
+                    return True
+        
+        return False
+    
+    def is_national_format(self, code: str) -> bool:
+        """检查股票代码是否为国标格式 (000001.SZ)"""
+        import re
+        return bool(re.match(r'^\d{6}\.(SH|SZ|BJ)$', code))
+    
+    def extract_digits_from_code(self, code: str) -> str:
+        """从股票代码中提取6位数字部分"""
+        import re
+        match = re.search(r'(\d{6})', code)
+        return match.group(1) if match else ""
+    
+    def find_matching_code(self, input_code: str, returned_codes: List[str]) -> Optional[str]:
+        """在返回的代码列表中查找与输入代码匹配的代码
+        支持不同格式之间的匹配
+        """
+        if not returned_codes:
+            return None
+            
+        input_digits = self.extract_digits_from_code(input_code)
+        if not input_digits:
+            return None
+            
+        # 查找相同数字部分的代码
+        for returned_code in returned_codes:
+            returned_digits = self.extract_digits_from_code(returned_code)
+            if returned_digits == input_digits:
+                return returned_code
+        
+        return None
+
     def calculate_similarity(self, str1: str, str2: str) -> float:
         """计算字符串相似度（简单实现）"""
         if not str1 or not str2:
@@ -252,18 +340,34 @@ class DataConsistencyChecker:
             'sources': {},
             'consistency': {},
             'overall_consistent': True,
-            'notes': []
+            'notes': [],
+            'code_format_issues': []  # 新增：记录股票代码格式问题
         }
         
-        # 标准化各数据源的数据
+        # 标准化各数据源的数据并验证股票代码格式
         normalized_data = {}
         for source, data in source_data.items():
+            # 检查返回的股票代码格式是否与输入一致
+            returned_codes = list(data.keys()) if data else []
+            code_format_ok = self.validate_stock_code_format(code, returned_codes, source)
+            if not code_format_ok:
+                comparison['code_format_issues'].append(
+                    f"{source}返回的股票代码格式不正确: 输入{code}, 返回{returned_codes}"
+                )
+            
             if code in data:
                 normalized_data[source] = self.normalize_data(data[code], source)
                 comparison['sources'][source] = data[code]
             else:
-                normalized_data[source] = {}
-                comparison['notes'].append(f"{source}未返回数据")
+                # 如果直接匹配不到，尝试查找相似的代码
+                matched_code = self.find_matching_code(code, returned_codes)
+                if matched_code:
+                    normalized_data[source] = self.normalize_data(data[matched_code], source)
+                    comparison['sources'][source] = data[matched_code]
+                    comparison['notes'].append(f"{source}代码映射: {code} -> {matched_code}")
+                else:
+                    normalized_data[source] = {}
+                    comparison['notes'].append(f"{source}未返回数据")
         
         # 如果少于2个数据源有数据，跳过比较
         available_sources = [s for s, d in normalized_data.items() if d]
@@ -332,6 +436,20 @@ class DataConsistencyChecker:
                 
                 # 更新统计
                 self.results['total_tested'] += 1
+                
+                # 统计代码格式问题
+                if comparison['code_format_issues']:
+                    self.results['code_format_issues'].extend(comparison['code_format_issues'])
+                    for issue in comparison['code_format_issues']:
+                        for source in self.sources:
+                            if source in issue:
+                                self.results['code_format_stats'][f"{source}_format_error"] += 1
+                else:
+                    # 记录格式正确的数据源
+                    for source in self.sources:
+                        if source in source_data and code in source_data[source]:
+                            self.results['code_format_stats'][f"{source}_format_ok"] += 1
+                
                 if comparison['overall_consistent']:
                     self.results['successful_comparisons'] += 1
                 else:
@@ -341,6 +459,7 @@ class DataConsistencyChecker:
                         'code': code,
                         'issues': comparison['notes'] + inconsistency_details['summary'],
                         'detailed_issues': inconsistency_details['details'],
+                        'code_format_issues': comparison['code_format_issues'],
                         'timestamp': comparison['timestamp']
                     })
                     
@@ -405,6 +524,23 @@ class DataConsistencyChecker:
             available = self.results['source_availability'].get(source, 0)
             availability_rate = (available / total * 100) if total > 0 else 0
             print(f"  {source}: {available}/{total} ({availability_rate:.1f}%)")
+        
+        print(f"\n股票代码格式一致性:")
+        for source in self.sources:
+            format_ok = self.results['code_format_stats'].get(f"{source}_format_ok", 0)
+            format_error = self.results['code_format_stats'].get(f"{source}_format_error", 0)
+            total_checked = format_ok + format_error
+            if total_checked > 0:
+                format_rate = (format_ok / total_checked * 100)
+                print(f"  {source}: {format_ok}/{total_checked} 格式正确 ({format_rate:.1f}%)")
+            else:
+                print(f"  {source}: 无数据检查")
+        
+        # 显示代码格式问题汇总
+        if self.results['code_format_issues']:
+            print(f"\n代码格式问题汇总 (前10个):")
+            for issue in self.results['code_format_issues'][:10]:
+                print(f"  {issue}")
         
         print(f"\n字段一致性统计:")
         # 计算各字段的一致性比例
@@ -533,6 +669,54 @@ class DataConsistencyChecker:
             logger.error(f"保存摘要报告失败: {e}")
 
 
+def test_code_format_specifically():
+    """专门测试股票代码格式一致性"""
+    print("\n" + "=" * 80)
+    print("股票代码格式一致性专项测试")
+    print("=" * 80)
+    
+    # 测试特定的国标格式股票代码
+    test_codes = [
+        '000001.SZ',  # 平安银行
+        '600000.SH',  # 浦发银行  
+        '002004.SZ',  # 华邦健康
+        '300001.SZ',  # 特锐德
+        '000300.SH',  # 沪深300
+    ]
+    
+    sources = ['sina', 'qq', 'dc']
+    
+    for code in test_codes:
+        print(f"\n【测试股票: {code}】")
+        print("-" * 50)
+        
+        for source in sources:
+            try:
+                api = pqquotation.use(source)
+                data = api.real([code], return_format='national')
+                
+                if data:
+                    returned_codes = list(data.keys())
+                    print(f"  {source:>6}: 输入 {code} -> 返回 {returned_codes}")
+                    
+                    # 验证格式
+                    if code in returned_codes:
+                        print(f"         ✓ 代码格式一致")
+                    else:
+                        print(f"         ❌ 代码格式不一致")
+                        
+                        # 尝试找到对应的代码
+                        checker = DataConsistencyChecker()
+                        matched = checker.find_matching_code(code, returned_codes)
+                        if matched:
+                            print(f"         💡 找到匹配代码: {matched}")
+                else:
+                    print(f"  {source:>6}: 无数据返回")
+                    
+            except Exception as e:
+                print(f"  {source:>6}: 错误 - {str(e)}")
+
+
 def main():
     """主函数"""
     import argparse
@@ -541,8 +725,14 @@ def main():
     parser.add_argument('--sample-size', type=int, default=100, help='测试样本大小 (默认: 100)')
     parser.add_argument('--price-tolerance', type=float, default=0.1, help='价格容差百分比 (默认: 0.1)')
     parser.add_argument('--volume-tolerance', type=float, default=5.0, help='成交量容差百分比 (默认: 5.0)')
+    parser.add_argument('--code-format-test', action='store_true', help='只运行股票代码格式测试')
     
     args = parser.parse_args()
+    
+    # 如果只运行代码格式测试
+    if args.code_format_test:
+        test_code_format_specifically()
+        return
     
     # 创建测试器
     checker = DataConsistencyChecker()
@@ -550,7 +740,10 @@ def main():
     checker.tolerance['volume_percent'] = args.volume_tolerance
     
     try:
-        # 运行测试
+        # 首先运行代码格式测试
+        test_code_format_specifically()
+        
+        # 然后运行完整的一致性测试
         checker.run_consistency_test(sample_size=args.sample_size)
         
     except KeyboardInterrupt:
